@@ -1,10 +1,11 @@
-from flask import Flask, request, jsonify, make_response
-from flask_cors import CORS
+import base64
+import hashlib
+import secrets
+from datetime import datetime, timedelta
 
 from cryptography.fernet import Fernet
-import secrets
-import hashlib
-from datetime import datetime, timedelta
+from flask import Flask, jsonify, make_response, request
+from flask_cors import CORS
 
 app = Flask(__name__)
 CORS(app, supports_credentials=True)
@@ -138,15 +139,31 @@ def create_user_route():
     return jsonify(user)
 
 
+def decode_credentials(encoded_credentials):
+    decode_credentials = base64.b64decode(encoded_credentials).decode("utf-8")
+    return decode_credentials.split(":")
+
+
+def verify_authentication():
+    auth_credetials = request.authorization
+    if auth_credetials and auth_credetials.type == "basic":
+        username, password = decode_credentials(
+            str(auth_credetials.username), str(auth_credetials)[6:])
+        return verify_user(username, password)
+    else:
+        raise Exception("Error de autenticación")
+
 # Ruta para iniciar sesión
-@app.route("/login", methods=["POST"])
-def login_route():
-    data = request.get_json()
-    user = verify_user(data["username"], data["password"])
-    if user:
-        session_id = create_session(user)
-        return create_session_cookie(session_id)
-    return jsonify({"message": "Usuario o contraseña incorrectos"}), 401
+
+
+# @app.route("/login", methods=["POST"])
+# def login_route():
+#     data = request.get_json()
+#     user = verify_user(data["username"], data["password"])
+#     if user:
+#         session_id = create_session(user)
+#         return create_session_cookie(session_id)
+#     return jsonify({"message": "Usuario o contraseña incorrectos"}), 401
 
 
 # Ruta para cerrar sesión
@@ -160,12 +177,22 @@ def logout_route():
 
 
 # Ruta para obtener el usuario autenticado
-@app.route("/me", methods=["GET"])
+# @app.route("/me", methods=["GET"])
+# def me_route():
+#     if verify_authentication():
+#         user = get_authenticated_user()
+#         return jsonify(user)
+#     return jsonify({"message": "No se ha iniciado sesión"}), 401
+
+@app.route("/profile", methods=["GET"])
 def me_route():
-    if verify_authentication():
-        user = get_authenticated_user()
-        return jsonify(user)
-    return jsonify({"message": "No se ha iniciado sesión"}), 401
+    try:
+        user_data = verify_authentication()
+        if user_data:
+            return jsonify(user_data), 200
+        return jsonify({"message": "Credenciales incorrectas. Se requiere autenticacion de un usuario existente"}), 401
+    except Exception as e:
+        return jsonify({"message": str(e)}), 401
 
 
 if __name__ == "__main__":
